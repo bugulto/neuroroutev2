@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 
 from app.db import get_pool
-from renderer.wiki_renderer import render_wikitext
+from renderer.mwparser_renderer import render_with_mwparser
 
 
 router = APIRouter()
@@ -25,7 +25,7 @@ async def render_page(page_id: int):
         if row is None:
             raise HTTPException(status_code=404, detail="page_id not found")
 
-        rendered = render_wikitext(row["raw_wikitext"])
+        rendered = render_with_mwparser(row["raw_wikitext"])
         html_bytes = int(rendered["rendered_html_length_bytes"])
         wikitext_bytes = int(row["wikitext_length_bytes"] or 0)
         expansion_ratio = html_bytes / wikitext_bytes if wikitext_bytes else 0.0
@@ -35,15 +35,11 @@ async def render_page(page_id: int):
                 """
                 UPDATE wiki_page_features
                 SET
-                    table_tag_count = $1,
-                    paragraph_tag_count = $2,
-                    rendered_html_length_bytes = $3,
-                    render_expansion_ratio = $4,
-                    html_tag_count = $5
-                WHERE page_id = $6
+                    rendered_html_length_bytes = $1,
+                    render_expansion_ratio = $2,
+                    html_tag_count = $3
+                WHERE page_id = $4
                 """,
-                int(rendered["table_tag_count"]),
-                int(rendered["paragraph_tag_count"]),
                 html_bytes,
                 expansion_ratio,
                 int(rendered["html_tag_count"]),
@@ -56,8 +52,13 @@ async def render_page(page_id: int):
             "rendered_html_length_bytes": html_bytes,
             "render_expansion_ratio": round(expansion_ratio, 6),
             "html_tag_count": int(rendered["html_tag_count"]),
-            "table_tag_count": int(rendered["table_tag_count"]),
-            "paragraph_tag_count": int(rendered["paragraph_tag_count"]),
+            "template_count_mw": int(rendered["template_count_mw"]),
+            "wikilink_count_mw": int(rendered["wikilink_count_mw"]),
+            "external_link_count_mw": int(rendered["external_link_count_mw"]),
+            "heading_count_mw": int(rendered["heading_count_mw"]),
+            "tag_count_mw": int(rendered["tag_count_mw"]),
+            "processed_text_length_bytes": int(rendered["processed_text_length_bytes"]),
+            "checksum": rendered["checksum"],
             "status": "rendered",
         }
     except HTTPException:
