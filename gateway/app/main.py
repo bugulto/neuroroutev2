@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 
 from app.router import route_request
+from app.render_api import router as render_router
 from app.db import close_pool
 
 
@@ -10,6 +11,8 @@ app = FastAPI(
     description="AI-driven predictive load balancer for Wikipedia-style workloads",
     version="0.1.0",
 )
+
+app.include_router(render_router)
 
 
 class WikiRequest(BaseModel):

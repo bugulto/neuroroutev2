@@ -24,7 +24,8 @@ services:
 
   gateway:
     build:
-      context: ./gateway
+      context: .
+      dockerfile: gateway/Dockerfile
     container_name: neuroroute_gateway
     env_file:
       - .env
