@@ -1,0 +1,137 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: neuroroute_postgres
+    env_file:
+      - .env
+    ports:
+      - "5432:5432"
+    volumes:
+      - neuroroute_pgdata:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U neuroroute_user -d neuroroute"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+    networks:
+      - neuroroute_net
+
+  gateway:
+    build:
+      context: ./gateway
+    container_name: neuroroute_gateway
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      worker_1:
+        condition: service_started
+      worker_2:
+        condition: service_started
+      worker_3:
+        condition: service_started
+      worker_4:
+        condition: service_started
+    environment:
+      WORKER_FAST_URLS: "http://worker_1:8001,http://worker_2:8002,http://worker_3:8003"
+      WORKER_SLOW_URLS: "http://worker_4:8004"
+      SLOW_THRESHOLD_BYTES: "50000"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+    networks:
+      - neuroroute_net
+
+  worker_1:
+    build:
+      context: ./worker
+    container_name: neuroroute_worker_1
+    environment:
+      WORKER_NAME: worker_1
+      WORKER_PORT: 8001
+      WORKER_LANE: fast
+    ports:
+      - "8001:8001"
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8001
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
+    networks:
+      - neuroroute_net
+
+  worker_2:
+    build:
+      context: ./worker
+    container_name: neuroroute_worker_2
+    environment:
+      WORKER_NAME: worker_2
+      WORKER_PORT: 8002
+      WORKER_LANE: fast
+    ports:
+      - "8002:8002"
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8002
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
+    networks:
+      - neuroroute_net
+
+  worker_3:
+    build:
+      context: ./worker
+    container_name: neuroroute_worker_3
+    environment:
+      WORKER_NAME: worker_3
+      WORKER_PORT: 8003
+      WORKER_LANE: fast
+    ports:
+      - "8003:8003"
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8003
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
+    networks:
+      - neuroroute_net
+
+  worker_4:
+    build:
+      context: ./worker
+    container_name: neuroroute_worker_4
+    environment:
+      WORKER_NAME: worker_4
+      WORKER_PORT: 8004
+      WORKER_LANE: slow
+    ports:
+      - "8004:8004"
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8004
+    deploy:
+      resources:
+        limits:
+          cpus: "1.00"
+          memory: 512M
+    networks:
+      - neuroroute_net
+
+volumes:
+  neuroroute_pgdata:
+
+networks:
+  neuroroute_net:
+    driver: bridge
