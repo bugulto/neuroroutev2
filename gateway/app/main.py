@@ -1,7 +1,6 @@
 from fastapi import FastAPI
-from pydantic import BaseModel
 
-from app.router import route_request
+from app.router import router as route_router
 from app.render_api import router as render_router
 from app.db import close_pool
 
@@ -13,12 +12,7 @@ app = FastAPI(
 )
 
 app.include_router(render_router)
-
-
-class WikiRequest(BaseModel):
-    page_id: int
-    title: str
-    raw_wikitext: str
+app.include_router(route_router)
 
 
 @app.get("/health")
@@ -27,11 +21,6 @@ async def health():
         "status": "ok",
         "service": "gateway",
     }
-
-
-@app.post("/route")
-async def route(payload: WikiRequest):
-    return await route_request(payload.model_dump())
 
 
 @app.on_event("shutdown")
