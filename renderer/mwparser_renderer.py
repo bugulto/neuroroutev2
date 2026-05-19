@@ -9,7 +9,7 @@ import mwparserfromhell
 HTML_TAG_PATTERN = re.compile(r"<[^>]+>")
 
 
-def render_with_mwparser(raw_wikitext: str) -> Dict[str, int | str]:
+def _build_mwparser_payload(raw_wikitext: str) -> Dict[str, int | str]:
     code = mwparserfromhell.parse(raw_wikitext)
 
     templates = code.filter_templates()
@@ -38,7 +38,6 @@ def render_with_mwparser(raw_wikitext: str) -> Dict[str, int | str]:
     rendered_html = "".join(parts)
     rendered_html_length_bytes = len(rendered_html.encode("utf-8"))
     html_tag_count = len(HTML_TAG_PATTERN.findall(rendered_html))
-
     checksum = hashlib.sha256(rendered_html.encode("utf-8")).hexdigest()
 
     return {
@@ -51,4 +50,31 @@ def render_with_mwparser(raw_wikitext: str) -> Dict[str, int | str]:
         "tag_count_mw": len(tags),
         "processed_text_length_bytes": processed_text_length_bytes,
         "checksum": checksum,
+        "rendered_html": rendered_html,
+    }
+
+
+def render_with_mwparser(raw_wikitext: str) -> Dict[str, int | str]:
+    payload = _build_mwparser_payload(raw_wikitext)
+
+    return {
+        "rendered_html_length_bytes": int(payload["rendered_html_length_bytes"]),
+        "html_tag_count": int(payload["html_tag_count"]),
+        "template_count_mw": int(payload["template_count_mw"]),
+        "wikilink_count_mw": int(payload["wikilink_count_mw"]),
+        "external_link_count_mw": int(payload["external_link_count_mw"]),
+        "heading_count_mw": int(payload["heading_count_mw"]),
+        "tag_count_mw": int(payload["tag_count_mw"]),
+        "processed_text_length_bytes": int(payload["processed_text_length_bytes"]),
+        "checksum": str(payload["checksum"]),
+    }
+
+
+def process_with_mwparser(raw_wikitext: str) -> Dict[str, int | str]:
+    payload = _build_mwparser_payload(raw_wikitext)
+
+    return {
+        "rendered_html_length_bytes": int(payload["rendered_html_length_bytes"]),
+        "html_tag_count": int(payload["html_tag_count"]),
+        "checksum": str(payload["checksum"]),
     }
