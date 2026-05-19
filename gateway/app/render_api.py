@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 
 from app.db import get_pool
-from renderer.mwparser_renderer import render_with_mwparser
+from renderer.mwparser_renderer import render_with_mwparser, process_with_mwparser
 
 
 router = APIRouter()
@@ -65,3 +65,36 @@ async def render_page(page_id: int):
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"render failed: {exc}")
+
+
+@router.get("/process/{page_id}")
+async def process_page(page_id: int):
+    try:
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT page_id, title, raw_wikitext
+                FROM wiki_pages
+                WHERE page_id = $1
+                """,
+                page_id,
+            )
+
+        if row is None:
+            raise HTTPException(status_code=404, detail="page_id not found")
+
+        processed = process_with_mwparser(row["raw_wikitext"])
+
+        return {
+            "page_id": row["page_id"],
+            "title": row["title"],
+            "rendered_html_length_bytes": int(processed["rendered_html_length_bytes"]),
+            "html_tag_count": int(processed["html_tag_count"]),
+            "checksum": processed["checksum"],
+            "status": "processed",
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"process failed: {exc}")
