@@ -11,6 +11,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY gateway/app ./app
 COPY renderer ./renderer
+COPY models ./models
 
 EXPOSE 8000
 

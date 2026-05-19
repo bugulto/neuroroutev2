@@ -1,7 +1,8 @@
 import os
-import time
 from fastapi import FastAPI
 from pydantic import BaseModel
+
+from renderer.mwparser_renderer import process_with_mwparser
 
 
 WORKER_NAME = os.getenv("WORKER_NAME", "worker")
@@ -18,7 +19,6 @@ class WorkRequest(BaseModel):
     page_id: int
     title: str
     raw_wikitext: str
-    predicted_slow: int
 
 
 @app.get("/health")
@@ -32,25 +32,15 @@ async def health():
 
 @app.post("/process")
 async def process(payload: WorkRequest):
-    start = time.perf_counter()
-
-    wikitext_size = len(payload.raw_wikitext.encode("utf-8"))
-
-    if WORKER_LANE == "slow":
-        simulated_ms = min(800, max(100, wikitext_size // 100))
-    else:
-        simulated_ms = min(100, max(20, wikitext_size // 1000))
-
-    time.sleep(simulated_ms / 1000)
-
-    elapsed_ms = round((time.perf_counter() - start) * 1000, 2)
+    processed = process_with_mwparser(payload.raw_wikitext)
 
     return {
         "worker": WORKER_NAME,
         "lane": WORKER_LANE,
         "page_id": payload.page_id,
         "title": payload.title,
-        "predicted_slow": payload.predicted_slow,
-        "simulated_ms": simulated_ms,
-        "actual_elapsed_ms": elapsed_ms,
+        "rendered_html_length_bytes": int(processed["rendered_html_length_bytes"]),
+        "html_tag_count": int(processed["html_tag_count"]),
+        "checksum": processed["checksum"],
+        "status": "processed",
     }

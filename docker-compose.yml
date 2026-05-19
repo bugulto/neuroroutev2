@@ -43,6 +43,7 @@ services:
       worker_4:
         condition: service_started
     environment:
+      WORKER_ALL_URLS: "http://worker_1:8001,http://worker_2:8002,http://worker_3:8003,http://worker_4:8004"
       WORKER_FAST_URLS: "http://worker_1:8001,http://worker_2:8002,http://worker_3:8003"
       WORKER_SLOW_URLS: "http://worker_4:8004"
       SLOW_THRESHOLD_BYTES: "50000"
@@ -56,7 +57,8 @@ services:
 
   worker_1:
     build:
-      context: ./worker
+      context: .
+      dockerfile: worker/Dockerfile
     container_name: neuroroute_worker_1
     environment:
       WORKER_NAME: worker_1
@@ -75,7 +77,8 @@ services:
 
   worker_2:
     build:
-      context: ./worker
+      context: .
+      dockerfile: worker/Dockerfile
     container_name: neuroroute_worker_2
     environment:
       WORKER_NAME: worker_2
@@ -94,7 +97,8 @@ services:
 
   worker_3:
     build:
-      context: ./worker
+      context: .
+      dockerfile: worker/Dockerfile
     container_name: neuroroute_worker_3
     environment:
       WORKER_NAME: worker_3
@@ -113,7 +117,8 @@ services:
 
   worker_4:
     build:
-      context: ./worker
+      context: .
+      dockerfile: worker/Dockerfile
     container_name: neuroroute_worker_4
     environment:
       WORKER_NAME: worker_4

@@ -1,42 +1,41 @@
 import os
+import pickle
 
 
-SLOW_THRESHOLD_BYTES = int(os.getenv("SLOW_THRESHOLD_BYTES", "50000"))
+_MODEL = None
+_FEATURE_ORDER = None
 
 
-def extract_features(raw_wikitext: str) -> dict:
-    return {
-        "wikitext_length_bytes": len(raw_wikitext.encode("utf-8")),
-        "template_count": raw_wikitext.count("{{"),
-        "image_count": raw_wikitext.lower().count("[[file:") + raw_wikitext.lower().count("[[image:"),
-        "reference_count": raw_wikitext.lower().count("<ref"),
-        "heading_count": raw_wikitext.count("=="),
-        "internal_link_count": raw_wikitext.count("[["),
-        "external_link_count": raw_wikitext.count("http://") + raw_wikitext.count("https://"),
-        "category_count": raw_wikitext.lower().count("[[category:"),
-    }
+def _load_model():
+    global _MODEL, _FEATURE_ORDER
+
+    if _MODEL is not None and _FEATURE_ORDER is not None:
+        return _MODEL, _FEATURE_ORDER
+
+    model_path = os.getenv(
+        "NEUROROUTE_MODEL_PATH",
+        "/app/models/cheap_neuroroute_random_forest10k.pkl",
+    )
+
+    with open(model_path, "rb") as handle:
+        payload = pickle.load(handle)
+
+    _MODEL = payload["model"]
+    _FEATURE_ORDER = list(payload["features"])
+
+    return _MODEL, _FEATURE_ORDER
 
 
-def predict_is_slow(raw_wikitext: str) -> int:
-    """
-    Temporary rule-based model.
+def predict_is_slow_from_features(features: dict) -> int:
+    model, feature_order = _load_model()
 
-    Replace this later with:
-    - scikit-learn model
-    - XGBoost model
-    - LightGBM model
-    - ONNX model
-    """
+    vector = [
+        [
+            float(features.get(feature_name, 0))
+            for feature_name in feature_order
+        ]
+    ]
 
-    features = extract_features(raw_wikitext)
+    prediction = model.predict(vector)[0]
 
-    if features["wikitext_length_bytes"] >= SLOW_THRESHOLD_BYTES:
-        return 1
-
-    if features["template_count"] >= 40:
-        return 1
-
-    if features["reference_count"] >= 100:
-        return 1
-
-    return 0
+    return int(prediction)
