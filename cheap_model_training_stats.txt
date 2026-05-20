@@ -1,3 +1,4 @@
+.pkl
 Dataset rows after dropna: 10001
 Class distribution:
 0: 8000 (79.99%)
@@ -29,3 +30,37 @@ external_link_count: 0.043954
 reference_count: 0.036505
 image_count: 0.019937
 category_count: 0.016392
+
+.joblib
+Dataset rows after dropna: 10001
+Class distribution:
+  0: 8000 (79.99%)
+  1: 2001 (20.01%)
+Validation metrics:
+  accuracy: 0.9633
+  precision: 0.9181
+  recall: 0.8967
+  f1: 0.9073
+  roc_auc: 0.9773
+  confusion matrix:
+[[1176   24]
+ [  31  269]]
+Test metrics:
+  accuracy: 0.9547
+  precision: 0.9000
+  recall: 0.8700
+  f1: 0.8847
+  roc_auc: 0.9817
+  confusion matrix:
+[[1172   29]
+ [  39  261]]
+Feature importance:
+  wikitext_length_bytes: 0.328996
+  internal_link_count: 0.263375
+  template_count: 0.202621
+  heading_count: 0.088220
+  external_link_count: 0.043954
+  reference_count: 0.036505
+  image_count: 0.019937
+  category_count: 0.016392
+
