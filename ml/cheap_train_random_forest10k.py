@@ -14,7 +14,7 @@ from sklearn.model_selection import train_test_split
 
 
 DATASET_PATH = os.path.join("dataset", "dataset10k.csv")
-MODEL_PATH = os.path.join("models", "cheap_neuroroute_random_forest10k.pkl")
+MODEL_PATH = os.path.join("models", "cheap_neuroroute_random_forest10k.joblib")
 
 TARGET_COLUMN = "is_slow"
 FEATURE_COLUMNS = [
