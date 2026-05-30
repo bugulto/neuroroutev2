@@ -18,3 +18,7 @@ worker/**/__pycache__/
 renderer/**/__pycache__/
 tools/**/__pycache__/
 wikiparser/**/__pycache__/
+
+models/neuroroute_random_forest50k_p80.joblib
+models/neuroroute_random_forest50k_p85.joblib
+models/neuroroute_random_forest50k_p90.joblib
