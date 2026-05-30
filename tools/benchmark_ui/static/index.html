@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="NeuroRoute Benchmark UI — orchestrate and visualize load-testing benchmarks for AI-driven predictive routing.">
+    <title>NeuroRoute — Benchmark UI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+    <!-- Header -->
+    <header id="header">
+        <div class="header-inner">
+            <div class="logo">
+                <svg class="logo-icon" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="16" cy="16" r="14" stroke="url(#grad)" stroke-width="2.5"/>
+                    <path d="M10 20 L16 8 L22 20" stroke="url(#grad)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                    <circle cx="16" cy="14" r="2.5" fill="url(#grad)"/>
+                    <defs>
+                        <linearGradient id="grad" x1="0" y1="0" x2="32" y2="32">
+                            <stop offset="0%" stop-color="#00d4aa"/>
+                            <stop offset="100%" stop-color="#7c5cfc"/>
+                        </linearGradient>
+                    </defs>
+                </svg>
+                <h1>NeuroRoute <span class="logo-accent">Benchmark</span></h1>
+            </div>
+            <div class="header-badge" id="global-status-badge">idle</div>
+        </div>
+    </header>
+
+    <main>
+        <!-- Config Panel -->
+        <section class="card" id="config-panel">
+            <h2 class="card-title">
+                <svg class="icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/></svg>
+                Configuration
+            </h2>
+
+            <form id="benchmark-form" autocomplete="off">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="threshold">Model Threshold</label>
+                        <select id="threshold" required>
+                            <option value="p80">p80</option>
+                            <option value="p85">p85</option>
+                            <option value="p90" selected>p90</option>
+                            <option value="p93">p93</option>
+                            <option value="p94">p94</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="users">Locust Users</label>
+                        <input type="number" id="users" value="10" min="1" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="spawn-rate">Spawn Rate</label>
+                        <input type="number" id="spawn-rate" value="2" min="1" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="total-count">Request Count</label>
+                        <input type="number" id="total-count" value="1000" min="1" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="slow-ratio">Slow Ratio</label>
+                        <input type="number" id="slow-ratio" value="0.20" min="0.01" max="0.99" step="0.01" required>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-primary" id="run-btn">
+                    <svg class="icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"/></svg>
+                    Run Benchmark
+                </button>
+            </form>
+        </section>
+
+        <!-- Progress Panel -->
+        <section class="card" id="progress-panel">
+            <h2 class="card-title">
+                <svg class="icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z" clip-rule="evenodd"/></svg>
+                Progress
+            </h2>
+
+            <!-- Step tracker -->
+            <div class="step-tracker" id="step-tracker">
+                <div class="step" data-step="validating">
+                    <div class="step-dot"></div>
+                    <span>Validate</span>
+                </div>
+                <div class="step-connector"></div>
+                <div class="step" data-step="generating benchmark pages">
+                    <div class="step-dot"></div>
+                    <span>Generate Pages</span>
+                </div>
+                <div class="step-connector"></div>
+                <div class="step" data-step="switching model">
+                    <div class="step-dot"></div>
+                    <span>Switch Model</span>
+                </div>
+                <div class="step-connector"></div>
+                <div class="step" data-step="restarting gateway">
+                    <div class="step-dot"></div>
+                    <span>Restart Gateway</span>
+                </div>
+                <div class="step-connector"></div>
+                <div class="step" data-step="running round robin">
+                    <div class="step-dot"></div>
+                    <span>Round Robin</span>
+                </div>
+                <div class="step-connector"></div>
+                <div class="step" data-step="running neuroroute">
+                    <div class="step-dot"></div>
+                    <span>NeuroRoute</span>
+                </div>
+                <div class="step-connector"></div>
+                <div class="step" data-step="analyzing">
+                    <div class="step-dot"></div>
+                    <span>Analyze</span>
+                </div>
+                <div class="step-connector"></div>
+                <div class="step" data-step="completed">
+                    <div class="step-dot"></div>
+                    <span>Done</span>
+                </div>
+            </div>
+
+            <!-- Log area -->
+            <div class="log-container">
+                <div class="log-header">
+                    <span>Command Logs</span>
+                    <button type="button" class="btn-ghost" id="clear-logs-btn">Clear</button>
+                </div>
+                <pre class="log-output" id="log-output">Waiting for benchmark run...</pre>
+            </div>
+        </section>
+
+        <!-- Results Panel -->
+        <section class="card" id="results-panel" style="display: none;">
+            <h2 class="card-title">
+                <svg class="icon" viewBox="0 0 20 20" fill="currentColor"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/></svg>
+                Results
+            </h2>
+
+            <!-- Improvement summary -->
+            <div class="result-section" id="improvement-section">
+                <h3>Improvement Summary</h3>
+                <pre class="improvement-text" id="improvement-text"></pre>
+            </div>
+
+            <!-- Summary table -->
+            <div class="result-section" id="summary-section">
+                <h3>Latency Metrics</h3>
+                <div class="table-wrapper">
+                    <table id="summary-table">
+                        <thead id="summary-thead"></thead>
+                        <tbody id="summary-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Chart image -->
+            <div class="result-section" id="chart-section">
+                <h3>Latency Comparison Chart</h3>
+                <div class="chart-container">
+                    <img id="chart-image" alt="Latency ranges comparison chart" />
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>NeuroRoute Benchmark UI &middot; Local Dev Tool</p>
+    </footer>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

@@ -14,7 +14,7 @@ def _load_model():
 
     model_path = os.getenv(
         "NEUROROUTE_MODEL_PATH",
-        "/app/models/neuroroute_random_forest50k_p90.joblib",
+        "/app/models/active_neuroroute_model.joblib",
     )
 
     if not os.path.exists(model_path):
