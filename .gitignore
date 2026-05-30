@@ -1,3 +1,14 @@
 /mnrenv
 /simplewiki-latest-pages-articles.xml
 /.env
+
+# Python cache and bytecode
+__pycache__/
+*.py[cod]
+*.pyc
+.pytest_cache/
+
+# Model artifacts
+models/
+models/*.joblib
+models/*.pkl
