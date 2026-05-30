@@ -25,5 +25,6 @@ models/neuroroute_random_forest50k_p90.joblib
 models/neuroroute_random_forest50k_p93.joblib
 models/neuroroute_random_forest50k_p94.joblib
 models/neuroroute_random_forest10k.joblib
+models/active_neuroroute_model.joblib
 
 
