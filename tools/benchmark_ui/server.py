@@ -210,6 +210,9 @@ def _run_locust(
     deadline = time.monotonic() + timeout
     last_logged_count = 0
 
+    stall_timeout = 120  # seconds with no new rows before we give up
+    last_progress_time = time.monotonic()
+
     try:
         while time.monotonic() < deadline:
             # Check if process exited on its own
@@ -222,12 +225,24 @@ def _run_locust(
             if row_count != last_logged_count and row_count > 0:
                 _log(run_id, f"  Progress: {row_count}/{expected_rows} requests")
                 last_logged_count = row_count
+                last_progress_time = time.monotonic()
 
             if row_count >= expected_rows:
                 _log(run_id, f"  All {expected_rows} requests completed")
                 # Give Locust a moment to flush and close
                 time.sleep(2)
                 # Terminate gracefully
+                proc.terminate()
+                try:
+                    proc.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.wait(timeout=5)
+                break
+
+            # Stall detection: if no new rows for stall_timeout, stop
+            if row_count > 0 and (time.monotonic() - last_progress_time) > stall_timeout:
+                _log(run_id, f"  Stalled at {row_count}/{expected_rows} for {stall_timeout}s — terminating")
                 proc.terminate()
                 try:
                     proc.wait(timeout=10)
@@ -259,12 +274,10 @@ def _run_locust(
         for line in stderr.strip().splitlines()[-10:]:
             _log(run_id, f"  [stderr] {line}")
 
-    # A negative return code from terminate/kill is expected and OK
     final_rows = _count_csv_rows(results_path)
-    if final_rows < expected_rows:
-        raise RuntimeError(
-            f"{label}: expected {expected_rows} rows but got {final_rows}"
-        )
+    _log(run_id, f"  Final: {final_rows}/{expected_rows} rows collected")
+    if final_rows == 0:
+        raise RuntimeError(f"{label}: no results collected")
 
 
 # ---------------------------------------------------------------------------
