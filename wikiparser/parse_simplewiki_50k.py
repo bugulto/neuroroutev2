@@ -334,16 +334,16 @@ def upsert_pages(conn: psycopg2.extensions.connection, pages: List[PageCandidate
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Parse Simple Wikipedia XML and load 10k pages into Postgres."
+        description="Parse Simple Wikipedia XML and load 50k pages into Postgres."
     )
     parser.add_argument("--xml-path", required=True, help="Path to the SimpleWiki XML dump")
-    parser.add_argument("--target-count", type=int, default=10000)
-    parser.add_argument("--random-count", type=int, default=6000)
-    parser.add_argument("--largest-count", type=int, default=2000)
-    parser.add_argument("--template-heavy-count", type=int, default=1000)
-    parser.add_argument("--complex-count", type=int, default=1000)
+    parser.add_argument("--target-count", type=int, default=50000)
+    parser.add_argument("--random-count", type=int, default=30000)
+    parser.add_argument("--largest-count", type=int, default=10000)
+    parser.add_argument("--template-heavy-count", type=int, default=5000)
+    parser.add_argument("--complex-count", type=int, default=5000)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--batch-size", type=int, default=500)
+    parser.add_argument("--batch-size", type=int, default=1000)
     args = parser.parse_args()
 
     if not os.path.exists(args.xml_path):
