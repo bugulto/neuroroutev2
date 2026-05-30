@@ -1,8 +1,8 @@
 from fastapi import FastAPI
 
-from app.router import router as route_router
-from app.render_api import router as render_router
 from app.db import close_pool
+from app.render_api import router as render_router
+from app.router import router as route_router
 
 
 app = FastAPI(
