@@ -2,7 +2,7 @@ from fastapi import FastAPI
 
 from app.db import close_pool
 from app.render_api import router as render_router
-from app.router import router as route_router
+from app.router import close_worker_client, router as route_router
 
 
 app = FastAPI(
@@ -25,4 +25,5 @@ async def health():
 
 @app.on_event("shutdown")
 async def shutdown():
+    await close_worker_client()
     await close_pool()
