@@ -1,12 +1,3 @@
-"""NeuroRoute Benchmark UI Server.
-
-A FastAPI application that orchestrates the full benchmark workflow:
-generate pages → switch model → restart gateway → run Locust benchmarks → analyze results.
-
-Start with:
-    uvicorn tools.benchmark_ui.server:app --host 0.0.0.0 --port 9000
-"""
-
 import csv
 import subprocess
 import sys
@@ -22,10 +13,6 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
 
-# ---------------------------------------------------------------------------
-# Paths
-# ---------------------------------------------------------------------------
-
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -35,27 +22,16 @@ RESULTS_DIR = LOADTESTS_DIR / "results"
 REPORTS_DIR = PROJECT_ROOT / "reports"
 MODELS_DIR = PROJECT_ROOT / "models"
 DATASET_DIR = PROJECT_ROOT / "dataset"
+
 VENV_BIN_DIR = Path(sys.executable).parent
 LOCUST_BIN = str(VENV_BIN_DIR / "locust")
-
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
 
 VALID_THRESHOLDS = ("p80", "p85", "p90", "p93", "p94")
 
 MODEL_TEMPLATE = "neuroroute_random_forest50k_{threshold}.joblib"
 DATASET_TEMPLATE = "dataset50k_{threshold}.csv"
 
-# ---------------------------------------------------------------------------
-# In-memory run store
-# ---------------------------------------------------------------------------
-
 RUNS: dict[str, dict[str, Any]] = {}
-
-# ---------------------------------------------------------------------------
-# Request / Response models
-# ---------------------------------------------------------------------------
 
 
 class BenchmarkRequest(BaseModel):
@@ -67,15 +43,11 @@ class BenchmarkRequest(BaseModel):
 
     @field_validator("threshold")
     @classmethod
-    def validate_threshold(cls, v: str) -> str:
-        if v not in VALID_THRESHOLDS:
+    def validate_threshold(cls, value: str) -> str:
+        if value not in VALID_THRESHOLDS:
             raise ValueError(f"threshold must be one of {VALID_THRESHOLDS}")
-        return v
+        return value
 
-
-# ---------------------------------------------------------------------------
-# App
-# ---------------------------------------------------------------------------
 
 app = FastAPI(
     title="NeuroRoute Benchmark UI",
@@ -85,28 +57,33 @@ app = FastAPI(
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+def make_run_id(threshold: str, users: int) -> str:
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return f"benchmark_u{users}_{threshold}_{timestamp}"
 
 
-def _make_run_id(threshold: str, users: int) -> str:
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    return f"benchmark_u{users}_{threshold}_{ts}"
+def log(run_id: str, message: str) -> None:
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    RUNS[run_id]["logs"].append(f"[{timestamp}] {message}")
 
 
-def _log(run_id: str, message: str) -> None:
-    ts = datetime.now().strftime("%H:%M:%S")
-    entry = f"[{ts}] {message}"
-    RUNS[run_id]["logs"].append(entry)
-
-
-def _set_status(run_id: str, status: str) -> None:
+def set_status(run_id: str, status: str) -> None:
     RUNS[run_id]["status"] = status
-    _log(run_id, f"Status → {status}")
+    log(run_id, f"Status → {status}")
 
 
-def _run_cmd(
+def count_csv_rows(path: Path) -> int:
+    if not path.exists():
+        return 0
+
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            return max(sum(1 for _ in handle) - 1, 0)
+    except OSError:
+        return 0
+
+
+def run_cmd(
     run_id: str,
     cmd: list[str],
     label: str,
@@ -114,12 +91,11 @@ def _run_cmd(
     env: dict[str, str] | None = None,
     timeout: int = 600,
 ) -> subprocess.CompletedProcess:
-    """Run a shell command, stream output into run logs."""
     import os
 
     full_env = {**os.environ, **(env or {})}
 
-    _log(run_id, f"$ {' '.join(cmd)}")
+    log(run_id, f"$ {' '.join(cmd)}")
 
     result = subprocess.run(
         cmd,
@@ -130,52 +106,52 @@ def _run_cmd(
         timeout=timeout,
     )
 
-    if result.stdout.strip():
-        for line in result.stdout.strip().splitlines():
-            _log(run_id, f"  {line}")
+    for line in result.stdout.strip().splitlines():
+        log(run_id, f"  {line}")
 
-    if result.stderr.strip():
-        for line in result.stderr.strip().splitlines():
-            _log(run_id, f"  [stderr] {line}")
+    for line in result.stderr.strip().splitlines():
+        log(run_id, f"  [stderr] {line}")
 
     if result.returncode != 0:
-        raise RuntimeError(f"{label} failed (exit {result.returncode})")
+        raise RuntimeError(f"{label} failed with exit code {result.returncode}")
 
     return result
 
 
-def _wait_for_gateway(run_id: str, retries: int = 15, delay: float = 2.0) -> None:
-    """Poll gateway health endpoint until it responds."""
-    import urllib.request
+def wait_for_gateway(run_id: str, retries: int = 15, delay: float = 2.0) -> None:
     import urllib.error
+    import urllib.request
 
     for attempt in range(1, retries + 1):
         try:
-            req = urllib.request.Request("http://localhost:8000/health")
-            with urllib.request.urlopen(req, timeout=5) as resp:
-                if resp.status == 200:
-                    _log(run_id, f"  Gateway healthy (attempt {attempt})")
+            request = urllib.request.Request("http://localhost:8000/health")
+            with urllib.request.urlopen(request, timeout=5) as response:
+                if response.status == 200:
+                    log(run_id, f"Gateway healthy on attempt {attempt}")
                     return
         except (urllib.error.URLError, OSError):
             pass
-        _log(run_id, f"  Waiting for gateway... (attempt {attempt}/{retries})")
+
+        log(run_id, f"Waiting for gateway... {attempt}/{retries}")
         time.sleep(delay)
 
-    raise RuntimeError("Gateway did not become healthy after restart")
+    raise RuntimeError("Gateway did not become healthy")
 
 
-def _count_csv_rows(path: Path) -> int:
-    """Count data rows in a CSV file (excludes header)."""
-    if not path.exists():
-        return 0
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return max(sum(1 for _ in f) - 1, 0)  # subtract header
-    except OSError:
-        return 0
+def kill_orphan_locust_processes(run_id: str) -> None:
+    result = subprocess.run(
+        ["pkill", "-f", "locust.*locust_.*_benchmark"],
+        cwd=str(PROJECT_ROOT),
+        capture_output=True,
+        text=True,
+    )
+
+    if result.returncode == 0:
+        log(run_id, "Killed orphan Locust processes")
+        time.sleep(1)
 
 
-def _run_locust(
+def run_locust(
     run_id: str,
     cmd: list[str],
     label: str,
@@ -185,276 +161,235 @@ def _run_locust(
     env: dict[str, str] | None = None,
     timeout: int = 1800,
     poll_interval: float = 3.0,
+    stall_timeout: int = 60,
 ) -> None:
-    """Run Locust via Popen and monitor the CSV for completion.
-
-    Locust's runner.quit() in headless mode sometimes doesn't exit
-    the process cleanly.  This monitors the results CSV and terminates
-    the process once all expected rows have been written.
-    """
     import os
-    import signal
 
     full_env = {**os.environ, **(env or {})}
-    _log(run_id, f"$ {' '.join(cmd)}")
 
-    proc = subprocess.Popen(
+    if results_path.exists():
+        results_path.unlink()
+
+    log(run_id, f"$ {' '.join(cmd)}")
+
+    process = subprocess.Popen(
         cmd,
         cwd=str(PROJECT_ROOT),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
         text=True,
         env=full_env,
     )
 
     deadline = time.monotonic() + timeout
-    last_logged_count = 0
-
-    stall_timeout = 120  # seconds with no new rows before we give up
+    last_count = -1
     last_progress_time = time.monotonic()
 
     try:
         while time.monotonic() < deadline:
-            # Check if process exited on its own
-            retcode = proc.poll()
-            if retcode is not None:
-                break
+            row_count = count_csv_rows(results_path)
 
-            # Check CSV progress
-            row_count = _count_csv_rows(results_path)
-            if row_count != last_logged_count and row_count > 0:
-                _log(run_id, f"  Progress: {row_count}/{expected_rows} requests")
-                last_logged_count = row_count
+            if row_count != last_count:
+                log(run_id, f"Progress: {row_count}/{expected_rows} requests")
+                last_count = row_count
                 last_progress_time = time.monotonic()
 
             if row_count >= expected_rows:
-                _log(run_id, f"  All {expected_rows} requests completed")
-                # Give Locust a moment to flush and close
+                log(run_id, f"All {expected_rows} requests completed")
                 time.sleep(2)
-                # Terminate gracefully
-                proc.terminate()
-                try:
-                    proc.wait(timeout=10)
-                except subprocess.TimeoutExpired:
-                    proc.kill()
-                    proc.wait(timeout=5)
                 break
 
-            # Stall detection: if no new rows for stall_timeout, stop
-            if row_count > 0 and (time.monotonic() - last_progress_time) > stall_timeout:
-                _log(run_id, f"  Stalled at {row_count}/{expected_rows} for {stall_timeout}s — terminating")
-                proc.terminate()
-                try:
-                    proc.wait(timeout=10)
-                except subprocess.TimeoutExpired:
-                    proc.kill()
-                    proc.wait(timeout=5)
+            return_code = process.poll()
+            if return_code is not None:
+                if row_count == 0:
+                    raise RuntimeError(f"{label} exited with no results")
                 break
+
+            if row_count > 0 and time.monotonic() - last_progress_time > stall_timeout:
+                raise RuntimeError(
+                    f"{label} stalled at {row_count}/{expected_rows} for {stall_timeout}s"
+                )
 
             time.sleep(poll_interval)
+
         else:
-            # Timeout reached
-            proc.kill()
-            proc.wait(timeout=5)
             raise RuntimeError(f"{label} timed out after {timeout}s")
 
-    except Exception:
-        # Ensure cleanup
-        if proc.poll() is None:
-            proc.kill()
-            proc.wait(timeout=5)
-        raise
+    finally:
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=5)
 
-    # Capture remaining output
-    stdout, stderr = proc.communicate(timeout=5) if proc.poll() is not None else ("", "")
-    if stdout and stdout.strip():
-        for line in stdout.strip().splitlines()[-20:]:
-            _log(run_id, f"  {line}")
-    if stderr and stderr.strip():
-        for line in stderr.strip().splitlines()[-10:]:
-            _log(run_id, f"  [stderr] {line}")
+    final_rows = count_csv_rows(results_path)
+    log(run_id, f"Final: {final_rows}/{expected_rows} rows collected")
 
-    final_rows = _count_csv_rows(results_path)
-    _log(run_id, f"  Final: {final_rows}/{expected_rows} rows collected")
     if final_rows == 0:
         raise RuntimeError(f"{label}: no results collected")
 
-
-# ---------------------------------------------------------------------------
-# Benchmark workflow (runs in background thread)
-# ---------------------------------------------------------------------------
+    if final_rows < expected_rows:
+        raise RuntimeError(f"{label}: incomplete results, got {final_rows}/{expected_rows}")
 
 
-def _run_benchmark_workflow(run_id: str, req: BenchmarkRequest) -> None:
+def validate_required_files(threshold: str) -> tuple[Path, Path]:
+    dataset_path = DATASET_DIR / DATASET_TEMPLATE.format(threshold=threshold)
+    model_path = MODELS_DIR / MODEL_TEMPLATE.format(threshold=threshold)
+
+    required_paths = [
+        dataset_path,
+        model_path,
+        SCRIPTS_DIR / "create_benchmark_pages.py",
+        SCRIPTS_DIR / "set_active_model.py",
+        SCRIPTS_DIR / "analyze_benchmark_results.py",
+        LOADTESTS_DIR / "locust_round_robin_benchmark.py",
+        LOADTESTS_DIR / "locust_neuroroute_benchmark.py",
+    ]
+
+    for path in required_paths:
+        if not path.exists():
+            raise FileNotFoundError(f"Missing required file: {path}")
+
+    return dataset_path, model_path
+
+
+def locust_cmd(locust_file: str, users: int, spawn_rate: int) -> list[str]:
+    return [
+        LOCUST_BIN,
+        "-f",
+        f"loadtests/{locust_file}",
+        "--host=http://localhost:8000",
+        f"--users={users}",
+        f"--spawn-rate={spawn_rate}",
+        "--headless",
+        "--loglevel=ERROR",
+    ]
+
+
+def run_benchmark_workflow(run_id: str, request: BenchmarkRequest) -> None:
     try:
-        threshold = req.threshold
-        users = req.users
-        spawn_rate = req.spawn_rate
-        total_count = req.total_count
-        slow_ratio = req.slow_ratio
+        threshold = request.threshold
+        users = request.users
+        spawn_rate = request.spawn_rate
+        total_count = request.total_count
+        slow_ratio = request.slow_ratio
 
-        # Derive paths
-        ts_suffix = run_id.split(f"benchmark_u{users}_{threshold}_")[1]
-        benchmark_users_env = f"{users}_{threshold}_{ts_suffix}"
+        timestamp = run_id.split(f"benchmark_u{users}_{threshold}_", 1)[1]
+        benchmark_users = f"{users}_{threshold}_{timestamp}"
 
-        dataset_path = DATASET_DIR / DATASET_TEMPLATE.format(threshold=threshold)
-        model_path = MODELS_DIR / MODEL_TEMPLATE.format(threshold=threshold)
+        dataset_path, _ = validate_required_files(threshold)
+
         benchmark_csv = LOADTESTS_DIR / "benchmark_pages.csv"
-
-        rr_results = RESULTS_DIR / f"round_robin_u{benchmark_users_env}_results.csv"
-        nr_results = RESULTS_DIR / f"neuroroute_u{benchmark_users_env}_results.csv"
+        rr_results = RESULTS_DIR / f"round_robin_u{benchmark_users}_results.csv"
+        nr_results = RESULTS_DIR / f"neuroroute_u{benchmark_users}_results.csv"
         report_dir = REPORTS_DIR / run_id
 
-        # Store paths in run for later retrieval
         RUNS[run_id]["report_dir"] = str(report_dir)
         RUNS[run_id]["rr_results"] = str(rr_results)
         RUNS[run_id]["nr_results"] = str(nr_results)
 
-        # ── Pre-flight checks ────────────────────────────────────
-        _set_status(run_id, "validating")
+        set_status(run_id, "validating")
+        kill_orphan_locust_processes(run_id)
+        log(run_id, "Pre-flight checks passed")
 
-        # Kill any orphan locust benchmark processes from previous runs
-        try:
-            import os as _os
-            result = subprocess.run(
-                ["pkill", "-f", "locust.*locust_(round_robin|neuroroute)_benchmark"],
-                capture_output=True, text=True,
-            )
-            if result.returncode == 0:
-                _log(run_id, "Killed orphan locust processes")
-                time.sleep(1)
-        except Exception:
-            pass  # pkill not found or no matching processes
+        set_status(run_id, "generating benchmark pages")
+        run_cmd(
+            run_id,
+            [
+                sys.executable,
+                "scripts/create_benchmark_pages.py",
+                "--dataset-path",
+                str(dataset_path),
+                "--total-count",
+                str(total_count),
+                "--slow-ratio",
+                str(slow_ratio),
+                "--output-path",
+                str(benchmark_csv),
+            ],
+            "Generate benchmark pages",
+        )
 
-        if not dataset_path.exists():
-            raise FileNotFoundError(f"Dataset not found: {dataset_path}")
-        if not model_path.exists():
-            raise FileNotFoundError(f"Model not found: {model_path}")
+        expected_rows = count_csv_rows(benchmark_csv)
+        if expected_rows <= 0:
+            raise RuntimeError("No benchmark pages were generated")
 
-        for script_name in [
-            "create_benchmark_pages.py",
-            "set_active_model.py",
-            "analyze_benchmark_results.py",
-        ]:
-            if not (SCRIPTS_DIR / script_name).exists():
-                raise FileNotFoundError(f"Script not found: scripts/{script_name}")
+        log(run_id, f"Benchmark pages generated: {expected_rows}")
 
-        for locust_file in [
-            "locust_round_robin_benchmark.py",
-            "locust_neuroroute_benchmark.py",
-        ]:
-            if not (LOADTESTS_DIR / locust_file).exists():
-                raise FileNotFoundError(f"Locust file not found: loadtests/{locust_file}")
+        set_status(run_id, "switching model")
+        run_cmd(
+            run_id,
+            [
+                sys.executable,
+                "scripts/set_active_model.py",
+                "--threshold",
+                threshold,
+            ],
+            "Set active model",
+        )
 
-        _log(run_id, "Pre-flight checks passed")
+        set_status(run_id, "restarting gateway")
+        run_cmd(
+            run_id,
+            ["docker", "compose", "restart", "gateway"],
+            "Restart gateway",
+            timeout=60,
+        )
 
-        # ── Step 1: Generate benchmark pages ─────────────────────
-        _set_status(run_id, "generating benchmark pages")
-
-        _run_cmd(run_id, [
-            sys.executable, "scripts/create_benchmark_pages.py",
-            "--dataset-path", str(dataset_path),
-            "--total-count", str(total_count),
-            "--slow-ratio", str(slow_ratio),
-            "--output-path", str(benchmark_csv),
-        ], "Generate benchmark pages")
-
-        # ── Step 2: Set active model ─────────────────────────────
-        _set_status(run_id, "switching model")
-
-        _run_cmd(run_id, [
-            sys.executable, "scripts/set_active_model.py",
-            "--threshold", threshold,
-        ], "Set active model")
-
-        # ── Step 3: Restart gateway ──────────────────────────────
-        _set_status(run_id, "restarting gateway")
-
-        _run_cmd(run_id, [
-            "docker", "compose", "restart", "gateway",
-        ], "Restart gateway", timeout=60)
-
-        _log(run_id, "Waiting for gateway to become healthy...")
         time.sleep(5)
-        _wait_for_gateway(run_id)
+        wait_for_gateway(run_id)
 
-        # ── Step 4: Round Robin Locust ───────────────────────────
-        _set_status(run_id, "running round robin")
-
-        _run_locust(
+        set_status(run_id, "running round robin")
+        run_locust(
             run_id,
-            [
-                LOCUST_BIN,
-                "-f", "loadtests/locust_round_robin_benchmark.py",
-                f"--host=http://localhost:8000",
-                f"--users={users}",
-                f"--spawn-rate={spawn_rate}",
-                "--headless",
-            ],
+            locust_cmd("locust_round_robin_benchmark.py", users, spawn_rate),
             "Round Robin benchmark",
-            results_path=rr_results,
-            expected_rows=total_count,
-            env={"BENCHMARK_USERS": benchmark_users_env},
-            timeout=1800,
+            rr_results,
+            expected_rows,
+            env={"BENCHMARK_USERS": benchmark_users},
         )
 
-        if not rr_results.exists():
-            raise FileNotFoundError(f"Round Robin results not created: {rr_results}")
-        _log(run_id, f"Round Robin results: {rr_results.name}")
+        set_status(run_id, "running neuroroute")
+        run_locust(
+            run_id,
+            locust_cmd("locust_neuroroute_benchmark.py", users, spawn_rate),
+            "NeuroRoute benchmark",
+            nr_results,
+            expected_rows,
+            env={"BENCHMARK_USERS": benchmark_users},
+        )
 
-        # ── Step 5: NeuroRoute Locust ────────────────────────────
-        _set_status(run_id, "running neuroroute")
-
-        _run_locust(
+        set_status(run_id, "analyzing")
+        run_cmd(
             run_id,
             [
-                LOCUST_BIN,
-                "-f", "loadtests/locust_neuroroute_benchmark.py",
-                f"--host=http://localhost:8000",
-                f"--users={users}",
-                f"--spawn-rate={spawn_rate}",
-                "--headless",
+                sys.executable,
+                "scripts/analyze_benchmark_results.py",
+                "--round-robin",
+                str(rr_results),
+                "--neuroroute",
+                str(nr_results),
+                "--output-name",
+                run_id,
             ],
-            "NeuroRoute benchmark",
-            results_path=nr_results,
-            expected_rows=total_count,
-            env={"BENCHMARK_USERS": benchmark_users_env},
-            timeout=1800,
+            "Analyze results",
         )
 
-        if not nr_results.exists():
-            raise FileNotFoundError(f"NeuroRoute results not created: {nr_results}")
-        _log(run_id, f"NeuroRoute results: {nr_results.name}")
-
-        # ── Step 6: Analyze ──────────────────────────────────────
-        _set_status(run_id, "analyzing")
-
-        _run_cmd(run_id, [
-            sys.executable, "scripts/analyze_benchmark_results.py",
-            "--round-robin", str(rr_results),
-            "--neuroroute", str(nr_results),
-            "--output-name", run_id,
-        ], "Analyze results")
-
-        # ── Done ─────────────────────────────────────────────────
-        _set_status(run_id, "completed")
-        _log(run_id, f"Report saved to: {report_dir}")
+        set_status(run_id, "completed")
+        log(run_id, f"Report saved to: {report_dir}")
 
     except Exception as exc:
         RUNS[run_id]["status"] = "failed"
         RUNS[run_id]["error"] = str(exc)
-        _log(run_id, f"FAILED: {exc}")
-
-
-# ---------------------------------------------------------------------------
-# Routes
-# ---------------------------------------------------------------------------
+        log(run_id, f"FAILED: {exc}")
 
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_index():
     index_path = STATIC_DIR / "index.html"
-    return HTMLResponse(content=index_path.read_text(encoding="utf-8"))
+    return HTMLResponse(index_path.read_text(encoding="utf-8"))
 
 
 @app.get("/api/thresholds")
@@ -463,23 +398,22 @@ async def get_thresholds():
 
 
 @app.post("/api/run-benchmark")
-async def run_benchmark(req: BenchmarkRequest):
-    # Check if any benchmark is currently running
-    for rid, run in RUNS.items():
+async def run_benchmark(request: BenchmarkRequest):
+    for run_id, run in RUNS.items():
         if run["status"] not in ("completed", "failed"):
             raise HTTPException(
                 status_code=409,
-                detail=f"Benchmark '{rid}' is already running. Wait for it to finish.",
+                detail=f"Benchmark '{run_id}' is already running",
             )
 
-    run_id = _make_run_id(req.threshold, req.users)
+    run_id = make_run_id(request.threshold, request.users)
 
     RUNS[run_id] = {
         "run_id": run_id,
         "status": "queued",
         "logs": [],
         "error": None,
-        "config": req.model_dump(),
+        "config": request.model_dump(),
         "report_dir": None,
         "rr_results": None,
         "nr_results": None,
@@ -487,8 +421,8 @@ async def run_benchmark(req: BenchmarkRequest):
     }
 
     thread = threading.Thread(
-        target=_run_benchmark_workflow,
-        args=(run_id, req),
+        target=run_benchmark_workflow,
+        args=(run_id, request),
         daemon=True,
     )
     thread.start()
@@ -502,6 +436,7 @@ async def benchmark_status(run_id: str):
         raise HTTPException(status_code=404, detail="Run not found")
 
     run = RUNS[run_id]
+
     return {
         "run_id": run_id,
         "status": run["status"],
@@ -517,11 +452,11 @@ async def report_image(run_id: str):
         raise HTTPException(status_code=404, detail="Run not found")
 
     run = RUNS[run_id]
+
     if run["status"] != "completed":
         raise HTTPException(status_code=404, detail="Benchmark not completed yet")
 
-    report_dir = Path(run["report_dir"])
-    image_path = report_dir / "latency_ranges_all_fast_slow.png"
+    image_path = Path(run["report_dir"]) / "latency_ranges_all_fast_slow.png"
 
     if not image_path.exists():
         raise HTTPException(status_code=404, detail="Chart image not found")
@@ -535,6 +470,7 @@ async def report_summary(run_id: str):
         raise HTTPException(status_code=404, detail="Run not found")
 
     run = RUNS[run_id]
+
     if run["status"] != "completed":
         raise HTTPException(status_code=404, detail="Benchmark not completed yet")
 
@@ -542,22 +478,17 @@ async def report_summary(run_id: str):
     summary_csv_path = report_dir / "summary.csv"
     improvement_path = report_dir / "improvement_summary.txt"
 
-    result: dict[str, Any] = {
-        "summary_table": None,
-        "improvement_text": None,
-    }
+    summary_table = None
+    improvement_text = None
 
-    # Parse summary.csv
     if summary_csv_path.exists():
-        rows = []
-        with open(summary_csv_path, "r", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                rows.append(row)
-        result["summary_table"] = rows
+        with open(summary_csv_path, "r", encoding="utf-8") as handle:
+            summary_table = list(csv.DictReader(handle))
 
-    # Read improvement text
     if improvement_path.exists():
-        result["improvement_text"] = improvement_path.read_text(encoding="utf-8")
+        improvement_text = improvement_path.read_text(encoding="utf-8")
 
-    return result
+    return {
+        "summary_table": summary_table,
+        "improvement_text": improvement_text,
+    }

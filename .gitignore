@@ -12,3 +12,9 @@ __pycache__/
 models/
 models/*.joblib
 models/*.pkl
+# Ignore Python cache in all subfolders
+gateway/**/__pycache__/
+worker/**/__pycache__/
+renderer/**/__pycache__/
+tools/**/__pycache__/
+wikiparser/**/__pycache__/
