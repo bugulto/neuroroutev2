@@ -9,7 +9,7 @@ import psycopg2.extras
 
 
 INPUT_PATH = os.path.join("loadtests", "results", "mw_sequential_response_times_50k.csv")
-SLOW_PERCENTILE = 0.85
+SLOW_PERCENTILE = 0.90
 
 
 def connect_db() -> psycopg2.extensions.connection:
