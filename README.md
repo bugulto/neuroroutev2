@@ -12,14 +12,23 @@ NeuroRoute is a Dockerized AI-driven predictive load balancer designed for Wikip
 **Success Metric:** By preventing Head-of-Line blocking for lightweight requests, the primary success metric of NeuroRoute is the **tail latency improvement (p95 / p99) for fast pages**.
 
 ## 2. Final Result
-Using a cached AI prediction pipeline at 10 Locust users, the system demonstrates massive improvements for fast-page rendering:
+Using an AI prediction pipeline at 25 Locust users, a spawn rate of 5, and 40% slow requests, the system demonstrates massive improvements for fast-page rendering compared to baseline Round Robin:
 
-- Fast-page mean latency improved from **267.95 ms to 35.06 ms**.
-- Fast-page p95 improved from **1301.84 ms to 115.40 ms**.
-- Fast-page p99 improved from **2203.45 ms to 258.41 ms**.
-- Fast-page mean improvement: **86.92%**.
-- Fast-page p95 improvement: **91.14%**.
-- Fast-page p99 improvement: **88.27%**.
+**Fast Pages (Cached Prediction):**
+- Mean improvement: **97.40%**
+- p50 improvement: **96.66%**
+- p80 improvement: **98.16%**
+- p90 improvement: **98.02%**
+- p95 improvement: **97.86%**
+- p99 improvement: **97.22%**
+
+**Fast Pages (Online Inference):**
+- Mean improvement: **83.58%**
+- p50 improvement: **77.25%**
+- p80 improvement: **91.40%**
+- p90 improvement: **90.34%**
+- p95 improvement: **85.78%**
+- p99 improvement: **64.25%**
 
 **The Tradeoff:**
 Isolating slow pages means they no longer benefit from sharing resources with fast requests, so slow pages become slower. As a result, the overall global p95/p99 latency can worsen if slow-page processing dominates the workload. Therefore, NeuroRoute is best framed as a **fast-tail-latency protection mechanism**, not a universal latency reduction tool.
