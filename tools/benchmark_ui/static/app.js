@@ -14,6 +14,7 @@
     const spawnRateInput = document.getElementById("spawn-rate");
     const totalCountInput = document.getElementById("total-count");
     const slowRatioInput = document.getElementById("slow-ratio");
+    const modeRadios = document.querySelectorAll('input[name="neuroroute_mode"]');
 
     const globalBadge = document.getElementById("global-status-badge");
     const logOutput = document.getElementById("log-output");
@@ -31,6 +32,7 @@
     let currentRunId = null;
     let pollTimer = null;
     let lastLogCount = 0;
+    let savedThreshold = thresholdSelect.value;
 
     // Step order for the tracker
     const STEP_ORDER = [
@@ -55,15 +57,44 @@
         "analyzing",
     ]);
 
+    // ── Mode Handling ─────────────────────────────────────────────
+
+    function getSelectedMode() {
+        const checked = document.querySelector('input[name="neuroroute_mode"]:checked');
+        return checked ? checked.value : "online";
+    }
+
+    function handleModeChange() {
+        const mode = getSelectedMode();
+
+        if (mode === "cache") {
+            savedThreshold = thresholdSelect.value;
+            thresholdSelect.value = "p93";
+            thresholdSelect.disabled = true;
+        } else {
+            thresholdSelect.disabled = false;
+            thresholdSelect.value = savedThreshold;
+        }
+    }
+
+    modeRadios.forEach(function (radio) {
+        radio.addEventListener("change", handleModeChange);
+    });
+
     // ── Helpers ───────────────────────────────────────────────────
 
     function setFormDisabled(disabled) {
-        thresholdSelect.disabled = disabled;
+        const mode = getSelectedMode();
+        thresholdSelect.disabled = disabled || mode === "cache";
         usersInput.disabled = disabled;
         spawnRateInput.disabled = disabled;
         totalCountInput.disabled = disabled;
         slowRatioInput.disabled = disabled;
         runBtn.disabled = disabled;
+
+        modeRadios.forEach(function (radio) {
+            radio.disabled = disabled;
+        });
 
         if (disabled) {
             runBtn.innerHTML =
@@ -93,7 +124,7 @@
         const currentIndex = STEP_ORDER.indexOf(currentStatus);
         const isFailed = currentStatus === "failed";
 
-        steps.forEach((stepEl, i) => {
+        steps.forEach(function (stepEl, i) {
             stepEl.classList.remove("active", "done", "failed");
 
             if (isFailed) {
@@ -114,7 +145,7 @@
             }
         });
 
-        connectors.forEach((conn, i) => {
+        connectors.forEach(function (conn, i) {
             conn.classList.remove("done");
             if (i < currentIndex || currentStatus === "completed") {
                 conn.classList.add("done");
@@ -151,18 +182,18 @@
         // Build header
         const keys = Object.keys(rows[0]);
         summaryThead.innerHTML =
-            "<tr>" + keys.map((k) => "<th>" + escapeHtml(k) + "</th>").join("") + "</tr>";
+            "<tr>" + keys.map(function (k) { return "<th>" + escapeHtml(k) + "</th>"; }).join("") + "</tr>";
 
         // Build body
         summaryTbody.innerHTML = rows
-            .map((row) => {
+            .map(function (row) {
                 const cells = keys
-                    .map((k) => {
-                        let cls = "";
+                    .map(function (k) {
+                        var cls = "";
                         if (k === "routing_mode") {
                             cls = row[k] === "round_robin" ? "mode-rr" : "mode-nr";
                         }
-                        const val =
+                        var val =
                             k === "routing_mode" || k === "group"
                                 ? escapeHtml(row[k])
                                 : formatNumber(row[k]);
@@ -206,8 +237,11 @@
             return;
         }
 
+        const mode = getSelectedMode();
+
         const payload = {
             threshold: thresholdSelect.value,
+            neuroroute_mode: mode,
             users: parseInt(usersInput.value, 10),
             spawn_rate: parseInt(spawnRateInput.value, 10),
             total_count: parseInt(totalCountInput.value, 10),
@@ -217,7 +251,7 @@
         setFormDisabled(true);
         resultsPanel.style.display = "none";
         lastLogCount = 0;
-        logOutput.textContent = "Starting benchmark...";
+        logOutput.textContent = "Starting benchmark (" + mode + " mode)...";
         updateGlobalBadge("queued");
         resetStepTracker();
 
@@ -245,10 +279,10 @@
     }
 
     function resetStepTracker() {
-        stepTracker.querySelectorAll(".step").forEach((s) => {
+        stepTracker.querySelectorAll(".step").forEach(function (s) {
             s.classList.remove("active", "done", "failed");
         });
-        stepTracker.querySelectorAll(".step-connector").forEach((c) => {
+        stepTracker.querySelectorAll(".step-connector").forEach(function (c) {
             c.classList.remove("done");
         });
     }
@@ -317,7 +351,7 @@
             resultsPanel.style.display = "block";
 
             // Smooth scroll to results
-            setTimeout(() => {
+            setTimeout(function () {
                 resultsPanel.scrollIntoView({ behavior: "smooth", block: "start" });
             }, 200);
         } catch (err) {

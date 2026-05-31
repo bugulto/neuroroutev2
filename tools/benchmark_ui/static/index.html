@@ -75,6 +75,22 @@
                     </div>
                 </div>
 
+                <div class="mode-group">
+                    <label class="mode-label">NeuroRoute Mode</label>
+                    <div class="mode-radios">
+                        <label class="radio-option">
+                            <input type="radio" name="neuroroute_mode" value="online" checked>
+                            <span class="radio-dot"></span>
+                            <span>Online inference</span>
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="neuroroute_mode" value="cache">
+                            <span class="radio-dot"></span>
+                            <span>Cached prediction</span>
+                        </label>
+                    </div>
+                </div>
+
                 <button type="submit" class="btn-primary" id="run-btn">
                     <svg class="icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"/></svg>
                     Run Benchmark

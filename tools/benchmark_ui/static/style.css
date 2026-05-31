@@ -264,6 +264,87 @@ main {
     cursor: not-allowed;
 }
 
+/* ── Mode Radio Group ─────────────────────────────────────────── */
+
+.mode-group {
+    margin-bottom: 1.5rem;
+}
+
+.mode-label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+}
+
+.mode-radios {
+    display: flex;
+    gap: 1.25rem;
+}
+
+.radio-option {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    transition: color var(--transition);
+}
+
+.radio-option:hover {
+    color: var(--text-primary);
+}
+
+.radio-option input[type="radio"] {
+    display: none;
+}
+
+.radio-dot {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.15);
+    background: var(--bg-input);
+    transition: all var(--transition);
+    flex-shrink: 0;
+    position: relative;
+}
+
+.radio-option input[type="radio"]:checked + .radio-dot {
+    border-color: var(--accent-start);
+    background: transparent;
+}
+
+.radio-option input[type="radio"]:checked + .radio-dot::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent-start);
+}
+
+.radio-option input[type="radio"]:checked ~ span:last-child {
+    color: var(--text-primary);
+}
+
+.radio-option input[type="radio"]:disabled + .radio-dot {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.radio-option input[type="radio"]:disabled ~ span:last-child {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
 /* ── Buttons ───────────────────────────────────────────────────── */
 
 .btn-primary {

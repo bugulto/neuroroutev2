@@ -106,6 +106,25 @@ async def get_cheap_features_by_page_id(page_id: int):
             """,
             page_id,
         )
+    
+async def get_page_with_cached_prediction(page_id: int):
+    pool = await get_pool()
+
+    async with pool.acquire() as conn:
+        return await conn.fetchrow(
+            """
+            SELECT
+                p.page_id,
+                p.title,
+                p.raw_wikitext,
+                pred.predicted_slow
+            FROM wiki_pages p
+            JOIN wiki_page_predictions pred
+            ON pred.page_id = p.page_id
+            WHERE p.page_id = $1
+            """,
+            page_id,
+        )
 
 
 async def call_worker(worker_url: str, page_row) -> dict:
@@ -174,7 +193,7 @@ async def route_neuroroute(page_id: int):
             raise HTTPException(status_code=404, detail="features not found")
 
         features = dict(feature_row)
-        predicted_slow = predict_is_slow_from_features(features)
+        predicted_slow = predict_is_slow_from_features(page_id, features)
 
         if predicted_slow == 1:
             selected_worker = next(slow_cycle)
@@ -200,3 +219,47 @@ async def route_neuroroute(page_id: int):
 
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"route failed: {exc}")
+    
+
+@router.post("/route-neuroroute-cached/{page_id}")
+async def route_neuroroute_cached(page_id: int):
+    if not FAST_WORKERS or not SLOW_WORKERS:
+        raise HTTPException(status_code=500, detail="no workers configured")
+
+    try:
+        page_row = await get_page_with_cached_prediction(page_id)
+
+        if page_row is None:
+            raise HTTPException(
+                status_code=404,
+                detail="page_id or cached prediction not found",
+            )
+
+        predicted_slow = int(page_row["predicted_slow"])
+
+        if predicted_slow == 1:
+            selected_worker = next(slow_cycle)
+            prediction_label = "slow"
+        else:
+            selected_worker = next(fast_cycle)
+            prediction_label = "fast"
+
+        worker_response = await call_worker(selected_worker, page_row)
+
+        return {
+            "page_id": int(page_row["page_id"]),
+            "title": page_row["title"],
+            "routing_mode": "neuroroute_cached",
+            "prediction_source": "cache",
+            "prediction": prediction_label,
+            "predicted_slow": predicted_slow,
+            "selected_worker": selected_worker,
+            "worker_response": worker_response,
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"route failed: {exc}")
+    

@@ -5,7 +5,7 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
@@ -36,6 +36,7 @@ RUNS: dict[str, dict[str, Any]] = {}
 
 class BenchmarkRequest(BaseModel):
     threshold: str
+    neuroroute_mode: Literal["online", "cache"] = "online"
     users: int = Field(default=10, gt=0)
     spawn_rate: int = Field(default=2, gt=0)
     total_count: int = Field(default=1000, gt=0)
@@ -57,8 +58,10 @@ app = FastAPI(
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
-def make_run_id(threshold: str, users: int) -> str:
+def make_run_id(threshold: str, users: int, mode: str) -> str:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    if mode == "cache":
+        return f"benchmark_u{users}_{threshold}_cache_{timestamp}"
     return f"benchmark_u{users}_{threshold}_{timestamp}"
 
 
@@ -234,7 +237,7 @@ def run_locust(
         raise RuntimeError(f"{label}: incomplete results, got {final_rows}/{expected_rows}")
 
 
-def validate_required_files(threshold: str) -> tuple[Path, Path]:
+def validate_required_files_online(threshold: str) -> tuple[Path, Path]:
     dataset_path = DATASET_DIR / DATASET_TEMPLATE.format(threshold=threshold)
     model_path = MODELS_DIR / MODEL_TEMPLATE.format(threshold=threshold)
 
@@ -253,6 +256,24 @@ def validate_required_files(threshold: str) -> tuple[Path, Path]:
             raise FileNotFoundError(f"Missing required file: {path}")
 
     return dataset_path, model_path
+
+
+def validate_required_files_cache() -> Path:
+    dataset_path = DATASET_DIR / DATASET_TEMPLATE.format(threshold="p93")
+
+    required_paths = [
+        dataset_path,
+        SCRIPTS_DIR / "create_benchmark_pages.py",
+        SCRIPTS_DIR / "analyze_benchmark_results.py",
+        LOADTESTS_DIR / "locust_round_robin_benchmark.py",
+        LOADTESTS_DIR / "locust_neuroroute_cache_benchmark.py",
+    ]
+
+    for path in required_paths:
+        if not path.exists():
+            raise FileNotFoundError(f"Missing required file: {path}")
+
+    return dataset_path
 
 
 def locust_cmd(locust_file: str, users: int, spawn_rate: int) -> list[str]:
@@ -275,11 +296,30 @@ def run_benchmark_workflow(run_id: str, request: BenchmarkRequest) -> None:
         spawn_rate = request.spawn_rate
         total_count = request.total_count
         slow_ratio = request.slow_ratio
+        mode = request.neuroroute_mode
 
-        timestamp = run_id.split(f"benchmark_u{users}_{threshold}_", 1)[1]
-        benchmark_users = f"{users}_{threshold}_{timestamp}"
+        # Force p93 for cache mode
+        if mode == "cache":
+            threshold = "p93"
 
-        dataset_path, _ = validate_required_files(threshold)
+        # Derive naming suffix
+        if mode == "cache":
+            timestamp = run_id.split(f"benchmark_u{users}_{threshold}_cache_", 1)[1]
+            benchmark_users = f"{users}_{threshold}_cache_{timestamp}"
+        else:
+            timestamp = run_id.split(f"benchmark_u{users}_{threshold}_", 1)[1]
+            benchmark_users = f"{users}_{threshold}_{timestamp}"
+
+        log(run_id, f"Mode: {mode} | Threshold: {threshold}")
+
+        # Validate files
+        set_status(run_id, "validating")
+        kill_orphan_locust_processes(run_id)
+
+        if mode == "cache":
+            dataset_path = validate_required_files_cache()
+        else:
+            dataset_path, _ = validate_required_files_online(threshold)
 
         benchmark_csv = LOADTESTS_DIR / "benchmark_pages.csv"
         rr_results = RESULTS_DIR / f"round_robin_u{benchmark_users}_results.csv"
@@ -290,10 +330,9 @@ def run_benchmark_workflow(run_id: str, request: BenchmarkRequest) -> None:
         RUNS[run_id]["rr_results"] = str(rr_results)
         RUNS[run_id]["nr_results"] = str(nr_results)
 
-        set_status(run_id, "validating")
-        kill_orphan_locust_processes(run_id)
         log(run_id, "Pre-flight checks passed")
 
+        # Generate benchmark pages
         set_status(run_id, "generating benchmark pages")
         run_cmd(
             run_id,
@@ -318,29 +357,40 @@ def run_benchmark_workflow(run_id: str, request: BenchmarkRequest) -> None:
 
         log(run_id, f"Benchmark pages generated: {expected_rows}")
 
-        set_status(run_id, "switching model")
-        run_cmd(
-            run_id,
-            [
-                sys.executable,
-                "scripts/set_active_model.py",
-                "--threshold",
-                threshold,
-            ],
-            "Set active model",
-        )
+        # Model switching (online mode only)
+        if mode == "online":
+            set_status(run_id, "switching model")
+            run_cmd(
+                run_id,
+                [
+                    sys.executable,
+                    "scripts/set_active_model.py",
+                    "--threshold",
+                    threshold,
+                ],
+                "Set active model",
+            )
 
-        set_status(run_id, "restarting gateway")
-        run_cmd(
-            run_id,
-            ["docker", "compose", "restart", "gateway"],
-            "Restart gateway",
-            timeout=60,
-        )
+            set_status(run_id, "restarting gateway")
+            run_cmd(
+                run_id,
+                ["docker", "compose", "restart", "gateway"],
+                "Restart gateway",
+                timeout=60,
+            )
 
-        time.sleep(5)
-        wait_for_gateway(run_id)
+            time.sleep(5)
+            wait_for_gateway(run_id)
+        else:
+            set_status(run_id, "switching model")
+            log(run_id, "Cache mode — skipping model switch")
+            set_status(run_id, "restarting gateway")
+            log(run_id, "Cache mode — skipping gateway restart")
 
+            # Still verify gateway is up
+            wait_for_gateway(run_id)
+
+        # Round Robin benchmark
         set_status(run_id, "running round robin")
         run_locust(
             run_id,
@@ -351,16 +401,24 @@ def run_benchmark_workflow(run_id: str, request: BenchmarkRequest) -> None:
             env={"BENCHMARK_USERS": benchmark_users},
         )
 
+        # NeuroRoute benchmark
         set_status(run_id, "running neuroroute")
+
+        if mode == "cache":
+            nr_locust_file = "locust_neuroroute_cache_benchmark.py"
+        else:
+            nr_locust_file = "locust_neuroroute_benchmark.py"
+
         run_locust(
             run_id,
-            locust_cmd("locust_neuroroute_benchmark.py", users, spawn_rate),
+            locust_cmd(nr_locust_file, users, spawn_rate),
             "NeuroRoute benchmark",
             nr_results,
             expected_rows,
             env={"BENCHMARK_USERS": benchmark_users},
         )
 
+        # Analyze
         set_status(run_id, "analyzing")
         run_cmd(
             run_id,
@@ -406,7 +464,11 @@ async def run_benchmark(request: BenchmarkRequest):
                 detail=f"Benchmark '{run_id}' is already running",
             )
 
-    run_id = make_run_id(request.threshold, request.users)
+    # Force p93 for cache mode
+    if request.neuroroute_mode == "cache":
+        request.threshold = "p93"
+
+    run_id = make_run_id(request.threshold, request.users, request.neuroroute_mode)
 
     RUNS[run_id] = {
         "run_id": run_id,
