@@ -4,6 +4,31 @@ import joblib
 
 _MODEL = None
 _FEATURE_ORDER = None
+_PREDICTION_CACHE = {}
+
+
+async def warmup_cache():
+    global _PREDICTION_CACHE
+    from app.db import get_pool
+
+    model, feature_order = _load_model()
+    
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("SELECT * FROM wiki_page_features")
+        
+    vectors = []
+    page_ids = []
+    for row in rows:
+        d = dict(row)
+        vectors.append([_coerce_feature(d.get(f, 0)) for f in feature_order])
+        page_ids.append(d["page_id"])
+        
+    if vectors:
+        predictions = model.predict(vectors)
+        for pid, pred in zip(page_ids, predictions):
+            _PREDICTION_CACHE[pid] = int(pred)
+
 
 
 def _load_model():
@@ -14,7 +39,7 @@ def _load_model():
 
     model_path = os.getenv(
         "NEUROROUTE_MODEL_PATH",
-        "/app/models/cheap_neuroroute_random_forest10k.joblib",
+        "/app/models/active_neuroroute_model.joblib",
     )
 
     if not os.path.exists(model_path):
@@ -40,7 +65,10 @@ def _coerce_feature(value) -> float:
         return 0.0
 
 
-def predict_is_slow_from_features(features: dict) -> int:
+def predict_is_slow_from_features(page_id: int, features: dict) -> int:
+    if page_id in _PREDICTION_CACHE:
+        return _PREDICTION_CACHE[page_id]
+
     model, feature_order = _load_model()
 
     vector = [[

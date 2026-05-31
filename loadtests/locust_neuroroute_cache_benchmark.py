@@ -123,7 +123,7 @@ class NeuroRouteBenchmarkUser(HttpUser):
         page_id = int(row["page_id"])
         is_slow = int(row["is_slow"])
 
-        response = self.client.post(f"/route-neuroroute/{page_id}")
+        response = self.client.post(f"/route-neuroroute-cached/{page_id}")
         response_time_ms = _get_response_time_ms(response)
 
         success = response.ok

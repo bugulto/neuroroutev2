@@ -31,8 +31,19 @@ CREATE TABLE IF NOT EXISTS wiki_page_labels (
     is_slow            SMALLINT CHECK (is_slow IN (0, 1))
 );
 
+CREATE TABLE IF NOT EXISTS wiki_page_predictions (
+    page_id BIGINT PRIMARY KEY REFERENCES wiki_pages(page_id),
+    predicted_slow SMALLINT CHECK (predicted_slow IN (0, 1)),
+    model_name TEXT,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
 CREATE INDEX IF NOT EXISTS idx_wiki_pages_title
 ON wiki_pages(title);
 
 CREATE INDEX IF NOT EXISTS idx_wiki_page_labels_is_slow
 ON wiki_page_labels(is_slow);
+
+CREATE INDEX IF NOT EXISTS idx_wiki_page_predictions_predicted_slow
+ON wiki_page_predictions(predicted_slow);

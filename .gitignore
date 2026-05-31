@@ -1,3 +1,31 @@
 /mnrenv
 /simplewiki-latest-pages-articles.xml
 /.env
+
+# Python cache and bytecode
+__pycache__/
+*.py[cod]
+*.pyc
+.pytest_cache/
+
+# Model artifacts
+models/
+models/*.joblib
+models/*.pkl
+# Ignore Python cache in all subfolders
+gateway/**/__pycache__/
+worker/**/__pycache__/
+renderer/**/__pycache__/
+tools/**/__pycache__/
+wikiparser/**/__pycache__/
+loadtest/**/__pycache__/
+
+models/neuroroute_random_forest50k_p80.joblib
+models/neuroroute_random_forest50k_p85.joblib
+models/neuroroute_random_forest50k_p90.joblib
+models/neuroroute_random_forest50k_p93.joblib
+models/neuroroute_random_forest50k_p94.joblib
+models/neuroroute_random_forest10k.joblib
+models/active_neuroroute_model.joblib
+
+
