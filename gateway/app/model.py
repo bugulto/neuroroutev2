@@ -6,31 +6,6 @@ _MODEL = None
 _FEATURE_ORDER = None
 _PREDICTION_CACHE = {}
 
-
-async def warmup_cache():
-    global _PREDICTION_CACHE
-    from app.db import get_pool
-
-    model, feature_order = _load_model()
-    
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        rows = await conn.fetch("SELECT * FROM wiki_page_features")
-        
-    vectors = []
-    page_ids = []
-    for row in rows:
-        d = dict(row)
-        vectors.append([_coerce_feature(d.get(f, 0)) for f in feature_order])
-        page_ids.append(d["page_id"])
-        
-    if vectors:
-        predictions = model.predict(vectors)
-        for pid, pred in zip(page_ids, predictions):
-            _PREDICTION_CACHE[pid] = int(pred)
-
-
-
 def _load_model():
     global _MODEL, _FEATURE_ORDER
 
