@@ -29,3 +29,5 @@ models/neuroroute_random_forest10k.joblib
 models/active_neuroroute_model.joblib
 
 
+reports
+loadtests/results 
