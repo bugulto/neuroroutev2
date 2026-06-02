@@ -30,6 +30,16 @@ Using an AI prediction pipeline at 25 Locust users, a spawn rate of 5, and 40% s
 - p95 improvement: **85.78%**
 - p99 improvement: **64.25%**
 
+In another experiment conducted with **20% slow requests**:
+
+**Online Inference Mode:**
+- Fast-page p95 improvement: **66.06%**
+- Fast-page p99 improvement: **68.21%**
+
+**Cached Prediction Mode:**
+- Fast-page p95 improvement: **93.79%**
+- Fast-page p99 improvement: **96.11%**. 
+
 **The Tradeoff:**
 Isolating slow pages means they no longer benefit from sharing resources with fast requests, so slow pages become slower. As a result, the overall global p95/p99 latency can worsen if slow-page processing dominates the workload. Therefore, NeuroRoute is best framed as a **fast-tail-latency protection mechanism**, not a universal latency reduction tool.
 
